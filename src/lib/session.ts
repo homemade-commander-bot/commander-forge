@@ -58,10 +58,9 @@ export function useSession(): Session {
 export async function signInWithEmail(email: string): Promise<{ error: string | null }> {
   const sb = getSupabase();
   if (!sb) return { error: "Sync is not configured." };
-  // The magic link in the email needs to land on /auth/callback so the
-  // server-side handler can exchange the PKCE ?code for a session and
-  // write the auth cookies. Without /auth/callback the redirect lands
-  // on / and the session never gets established under PKCE.
+  // Magic links land on /auth/callback (a client page) which confirms the
+  // session parsed from the URL fragment and shows success/error feedback.
+  // Keep this path in Supabase → Auth → URL Configuration → Redirect URLs.
   const redirectTo =
     typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined;
   const { error } = await sb.auth.signInWithOtp({

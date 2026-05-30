@@ -7,7 +7,7 @@
 //
 // The component is purely additive — the app works fine without it.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useDeckStore } from "@/lib/store";
 import {
   deleteRemoteDeck,
@@ -28,45 +28,68 @@ export function CloudSync() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const [lastSync, setLastSync] = useState<number | null>(null);
+  const [cloudCount, setCloudCount] = useState<number | null>(null);
 
   const decks = useDeckStore((s) => s.decks);
+  const localCount = Object.keys(decks).length;
 
-  // On sign-in, pull remote decks and merge into local store.
+  // Pull cloud decks and merge into local (last-write-wins by updatedAt),
+  // recording how many decks the cloud holds for the diagnostic readout.
+  const pullAndMerge = useCallback(async () => {
+    const remote = await fetchRemoteDecks();
+    setCloudCount(remote.length);
+    if (remote.length > 0) {
+      const state = useDeckStore.getState();
+      const merged = { ...state.decks };
+      for (const d of remote) {
+        const local = merged[d.id];
+        if (!local || (d.updatedAt ?? 0) > (local.updatedAt ?? 0)) {
+          merged[d.id] = d;
+        }
+      }
+      useDeckStore.setState({ decks: merged });
+    }
+  }, []);
+
+  // Push every local deck up to the cloud.
+  const pushAll = useCallback(async () => {
+    const list: Deck[] = Object.values(useDeckStore.getState().decks);
+    for (const d of list) await pushDeck(d);
+    setCloudCount(list.length);
+  }, []);
+
+  // Full reconcile: pull then push, so a freshly signed-in device both
+  // receives the cloud's decks and contributes its own. Used by the sign-in
+  // effect and the manual "Sync now" button.
+  const runSync = useCallback(async () => {
+    setErrorMsg(null);
+    setSyncStatus("syncing");
+    try {
+      await pullAndMerge();
+      await pushAll();
+      setSyncStatus("ok");
+      setLastSync(Date.now());
+    } catch (e) {
+      setSyncStatus("error");
+      setErrorMsg(e instanceof Error ? e.message : "Sync failed");
+    }
+  }, [pullAndMerge, pushAll]);
+
+  // On sign-in, reconcile both directions once.
   useEffect(() => {
     if (!user) return;
-    (async () => {
-      try {
-        setSyncStatus("syncing");
-        const remote = await fetchRemoteDecks();
-        if (remote.length > 0) {
-          const state = useDeckStore.getState();
-          const merged = { ...state.decks };
-          for (const d of remote) {
-            const local = merged[d.id];
-            // Last-write-wins by updatedAt
-            if (!local || (d.updatedAt ?? 0) > (local.updatedAt ?? 0)) {
-              merged[d.id] = d;
-            }
-          }
-          useDeckStore.setState({ decks: merged });
-        }
-        setSyncStatus("ok");
-        setLastSync(Date.now());
-      } catch (e) {
-        setSyncStatus("error");
-        setErrorMsg(e instanceof Error ? e.message : "Sync failed");
-      }
-    })();
+    void runSync();
+    // runSync is stable (useCallback); intentionally only re-run on sign-in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // Push local changes to the cloud (debounced) when signed in.
+  // Push local edits to the cloud (debounced) while signed in.
   useEffect(() => {
     if (!user) return;
     const t = window.setTimeout(async () => {
       try {
         setSyncStatus("syncing");
-        const list: Deck[] = Object.values(decks);
-        for (const d of list) await pushDeck(d);
+        await pushAll();
         setSyncStatus("ok");
         setLastSync(Date.now());
       } catch (e) {
@@ -75,7 +98,7 @@ export function CloudSync() {
       }
     }, 1500);
     return () => window.clearTimeout(t);
-  }, [decks, user]);
+  }, [decks, user, pushAll]);
 
   if (!syncEnabled) {
     return (
@@ -164,12 +187,35 @@ export function CloudSync() {
             await signOut();
             setSyncStatus("idle");
             setLastSync(null);
+            setCloudCount(null);
           }}
           className="btn btn-ghost text-xs ml-auto"
         >
           Sign out
         </button>
       </div>
+
+      {/* Diagnostic + at-a-glance readout: how many decks live in the cloud
+          vs on this device. If these disagree, "Sync now" reconciles them. */}
+      <div className="flex items-center gap-2 flex-wrap text-xs">
+        <span className="chip border-bg-border">
+          ☁ Cloud<span className="text-violet-300 font-semibold ml-1">{cloudCount ?? "—"}</span>
+        </span>
+        <span className="chip border-bg-border">
+          💻 This device<span className="text-violet-300 font-semibold ml-1">{localCount}</span>
+        </span>
+        <button
+          onClick={() => void runSync()}
+          disabled={syncStatus === "syncing"}
+          className="btn btn-ghost text-xs"
+        >
+          {syncStatus === "syncing" ? "Syncing…" : "Sync now"}
+        </button>
+      </div>
+      <p className="text-[11px] text-zinc-500">
+        Decks merge in both directions. When the same deck exists in both places, the most recently edited copy wins.
+      </p>
+
       {syncStatus === "error" && errorMsg && (
         <p className="text-xs text-red-400">Last error: {errorMsg}</p>
       )}
