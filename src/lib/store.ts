@@ -94,6 +94,10 @@ export interface CollectionEntry {
   cardId: string;
   card: Card;
   acquiredAt: number;
+  // Last time this entry's quantities changed. Last-write-wins tiebreaker
+  // for cloud sync (mirrors Deck.updatedAt). Optional for back-compat with
+  // entries persisted before sync existed; treated as 0 when absent.
+  updatedAt?: number;
   groupQuantities: Record<string, { quantity: number; foilQuantity: number }>;
 }
 
@@ -417,6 +421,7 @@ export const useDeckStore = create<DeckStore>()(
             cardId: card.id,
             card,
             acquiredAt: existing?.acquiredAt ?? Date.now(),
+            updatedAt: Date.now(),
             groupQuantities: { ...groups, [groupId]: nextGroup },
           };
           return { collection: { ...all, [card.id]: nextEntry } };
@@ -442,7 +447,7 @@ export const useDeckStore = create<DeckStore>()(
           if (Object.keys(nextGroups).length === 0) {
             delete next[cardId];
           } else {
-            next[cardId] = { ...existing, groupQuantities: nextGroups };
+            next[cardId] = { ...existing, groupQuantities: nextGroups, updatedAt: Date.now() };
           }
           return { collection: next };
         }),
@@ -466,7 +471,7 @@ export const useDeckStore = create<DeckStore>()(
           if (Object.keys(nextGroups).length === 0) {
             delete next[cardId];
           } else {
-            next[cardId] = { ...existing, groupQuantities: nextGroups };
+            next[cardId] = { ...existing, groupQuantities: nextGroups, updatedAt: Date.now() };
           }
           return { collection: next };
         }),
@@ -521,7 +526,7 @@ export const useDeckStore = create<DeckStore>()(
               quantity: def.quantity + removed.quantity,
               foilQuantity: def.foilQuantity + removed.foilQuantity,
             };
-            collection[cardId] = { ...entry, groupQuantities: nextGroups };
+            collection[cardId] = { ...entry, groupQuantities: nextGroups, updatedAt: Date.now() };
           }
           // If profile pointed at the deleted group, reset fast-add to default.
           const profile = s.profile.fastAddGroupId === id

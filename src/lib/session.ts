@@ -10,7 +10,7 @@
 import { useEffect, useState } from "react";
 import { getSupabase, isSyncEnabled } from "./supabase";
 import type { Deck } from "./types";
-import type { Profile } from "./store";
+import type { Profile, CollectionEntry, CollectionGroup } from "./store";
 
 // The subset of the profile that syncs to the cloud. fastAddGroupId is a
 // device-local UI preference and is intentionally excluded.
@@ -162,4 +162,37 @@ export function remoteProfileWins(local: Profile, remote: RemoteProfile): boolea
   if (remoteCustom && !localCustom) return true;
   if (localCustom && !remoteCustom) return false;
   return (remote.updatedAt ?? 0) > (local.updatedAt ?? 0);
+}
+
+// ---- collection sync -----------------------------------------------------
+
+export interface RemoteCollection {
+  entries: CollectionEntry[];
+  groups: CollectionGroup[];
+}
+
+export async function fetchRemoteCollection(): Promise<RemoteCollection> {
+  const res = await authFetch("/api/collection");
+  if (!res.ok) throw new Error(`Failed to fetch collection (${res.status})`);
+  return (await res.json()) as RemoteCollection;
+}
+
+// Bulk-upsert the full local collection (entries + groups) in one request.
+export async function pushCollection(
+  entries: CollectionEntry[],
+  groups: CollectionGroup[],
+): Promise<void> {
+  if (entries.length === 0 && groups.length === 0) return;
+  const res = await authFetch("/api/collection", {
+    method: "POST",
+    body: JSON.stringify({ entries, groups }),
+  });
+  if (!res.ok) throw new Error(`Failed to save collection (${res.status})`);
+}
+
+export async function deleteRemoteCollectionEntry(cardId: string): Promise<void> {
+  const res = await authFetch(`/api/collection?cardId=${encodeURIComponent(cardId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`Failed to delete collection entry (${res.status})`);
 }

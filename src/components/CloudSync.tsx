@@ -10,9 +10,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useDeckStore } from "@/lib/store";
 import {
+  deleteRemoteCollectionEntry,
   deleteRemoteDeck,
+  fetchRemoteCollection,
   fetchRemoteDecks,
   fetchRemoteProfile,
+  pushCollection,
   pushDeck,
   pushProfile,
   remoteProfileWins,
@@ -36,6 +39,9 @@ export function CloudSync() {
   const decks = useDeckStore((s) => s.decks);
   const localCount = Object.keys(decks).length;
   const profile = useDeckStore((s) => s.profile);
+  const collection = useDeckStore((s) => s.collection);
+  const collectionGroups = useDeckStore((s) => s.collectionGroups);
+  const collectionCount = Object.keys(collection ?? {}).length;
 
   // Reconcile the profile (name/avatar/colors/themes) with the cloud. A
   // customized profile beats a default one; otherwise newest-edit wins.
@@ -58,6 +64,27 @@ export function CloudSync() {
     } else {
       await pushProfile(local);
     }
+  }, []);
+
+  // Reconcile the collection: pull cloud entries/groups, merge into local
+  // (entries last-write-wins by updatedAt; groups union by id), then push the
+  // merged set back so the cloud holds everything this device knows.
+  const reconcileCollection = useCallback(async () => {
+    const remote = await fetchRemoteCollection();
+    const state = useDeckStore.getState();
+    const mergedCollection = { ...(state.collection ?? {}) };
+    for (const re of remote.entries) {
+      const local = mergedCollection[re.cardId];
+      if (!local || (re.updatedAt ?? 0) > (local.updatedAt ?? 0)) {
+        mergedCollection[re.cardId] = re;
+      }
+    }
+    const mergedGroups = { ...(state.collectionGroups ?? {}) };
+    for (const rg of remote.groups) {
+      if (!mergedGroups[rg.id]) mergedGroups[rg.id] = rg;
+    }
+    useDeckStore.setState({ collection: mergedCollection, collectionGroups: mergedGroups });
+    await pushCollection(Object.values(mergedCollection), Object.values(mergedGroups));
   }, []);
 
   // Pull cloud decks and merge into local (last-write-wins by updatedAt),
@@ -95,13 +122,14 @@ export function CloudSync() {
       await pullAndMerge();
       await pushAll();
       await reconcileProfile();
+      await reconcileCollection();
       setSyncStatus("ok");
       setLastSync(Date.now());
     } catch (e) {
       setSyncStatus("error");
       setErrorMsg(e instanceof Error ? e.message : "Sync failed");
     }
-  }, [pullAndMerge, pushAll, reconcileProfile]);
+  }, [pullAndMerge, pushAll, reconcileProfile, reconcileCollection]);
 
   // On sign-in, reconcile both directions once.
   useEffect(() => {
@@ -138,6 +166,18 @@ export function CloudSync() {
     }, 1500);
     return () => window.clearTimeout(t);
   }, [profile, user]);
+
+  // Push collection edits (entries + groups) to the cloud, debounced.
+  useEffect(() => {
+    if (!user) return;
+    const t = window.setTimeout(() => {
+      const st = useDeckStore.getState();
+      pushCollection(Object.values(st.collection ?? {}), Object.values(st.collectionGroups ?? {})).catch(() => {
+        // Best-effort; next sign-in reconcile catches it up.
+      });
+    }, 1500);
+    return () => window.clearTimeout(t);
+  }, [collection, collectionGroups, user]);
 
   if (!syncEnabled) {
     return (
@@ -238,10 +278,13 @@ export function CloudSync() {
           vs on this device. If these disagree, "Sync now" reconciles them. */}
       <div className="flex items-center gap-2 flex-wrap text-xs">
         <span className="chip border-bg-border">
-          ☁ Cloud<span className="text-violet-300 font-semibold ml-1">{cloudCount ?? "—"}</span>
+          ☁ Cloud<span className="text-violet-300 font-semibold ml-1">{cloudCount ?? "—"}</span> decks
         </span>
         <span className="chip border-bg-border">
-          💻 This device<span className="text-violet-300 font-semibold ml-1">{localCount}</span>
+          💻 This device<span className="text-violet-300 font-semibold ml-1">{localCount}</span> decks
+        </span>
+        <span className="chip border-bg-border">
+          🃏 Collection<span className="text-violet-300 font-semibold ml-1">{collectionCount}</span> cards
         </span>
         <button
           onClick={() => void runSync()}
@@ -252,13 +295,14 @@ export function CloudSync() {
         </button>
       </div>
       <p className="text-[11px] text-zinc-500">
-        Decks merge in both directions. When the same deck exists in both places, the most recently edited copy wins.
+        Decks, your profile, and your collection all sync. When the same item exists in two places, the most recently edited copy wins.
       </p>
 
       {syncStatus === "error" && errorMsg && (
         <p className="text-xs text-red-400">Last error: {errorMsg}</p>
       )}
       <DeleteDeckSyncControl />
+      <DeleteCollectionSyncControl />
     </section>
   );
 }
@@ -300,6 +344,26 @@ function DeleteDeckSyncControl() {
       for (const id of removed) {
         deleteRemoteDeck(id).catch(() => {
           // Swallow — best-effort cleanup; orphaned rows are harmless.
+        });
+      }
+    });
+    return unsub;
+  }, []);
+  return null;
+}
+
+// Mirrors deletions of collection entries (a card fully removed locally) to
+// the cloud, so removing a card on one device removes it everywhere.
+function DeleteCollectionSyncControl() {
+  useEffect(() => {
+    let prevIds = Object.keys(useDeckStore.getState().collection ?? {});
+    const unsub = useDeckStore.subscribe((s) => {
+      const ids = Object.keys(s.collection ?? {});
+      const removed = prevIds.filter((id) => !ids.includes(id));
+      prevIds = ids;
+      for (const id of removed) {
+        deleteRemoteCollectionEntry(id).catch(() => {
+          // Best-effort cleanup; orphaned rows are harmless.
         });
       }
     });
