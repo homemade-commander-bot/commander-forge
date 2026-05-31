@@ -5,6 +5,7 @@ import type { Card, Ruling } from "@/lib/types";
 import { scryfall, frontImage, backImage, safeHttpUrl } from "@/lib/scryfall";
 import { ManaCost } from "./ManaCost";
 import { useDeckStore, entryQuantity, entryFoilQuantity, DEFAULT_GROUP_ID } from "@/lib/store";
+import { haptic } from "@/lib/feedback";
 
 interface Props {
   card: Card | null;
@@ -138,7 +139,7 @@ export function CardDetail({ card, deckId, onClose }: Props) {
               {deckId && (
                 <>
                   {!inDeck ? (
-                    <button onClick={() => addCard(deckId, card)} className="btn btn-primary">+ Add to deck</button>
+                    <button onClick={() => { addCard(deckId, card); haptic(); }} className="btn btn-primary">+ Add to deck</button>
                   ) : (
                     <button onClick={() => removeCard(deckId, card.id)} className="btn btn-danger">Remove</button>
                   )}
@@ -296,7 +297,7 @@ export function CardDetail({ card, deckId, onClose }: Props) {
               onUseArt={(p) => {
                 if (deckId) replacePrinting(deckId, card.id, p);
               }}
-              onAddToCollection={(p) => addToCollection(p, 1, false, fastAddGroupId)}
+              onAddToCollection={(p) => { addToCollection(p, 1, false, fastAddGroupId); haptic(); }}
               fastAddGroupName={fastAddGroup?.name}
             />
           </div>

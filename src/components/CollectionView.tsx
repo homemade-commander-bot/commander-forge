@@ -23,6 +23,7 @@ import { CardDetail } from "./CardDetail";
 import { CardHoverLayer, hoverProps, useCardHover } from "./CardHoverPreview";
 import { ManaCost, ColorIdentityPips } from "./ManaCost";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { CollectionImportModal } from "./CollectionImportModal";
 
 type SortMode = "name" | "value" | "set" | "added";
 
@@ -73,6 +74,7 @@ export function CollectionView() {
   const [inspect, setInspect] = useState<Card | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [showGroupManager, setShowGroupManager] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const hover = useCardHover();
 
   // Entries that belong in the current group view.
@@ -178,7 +180,7 @@ export function CollectionView() {
               Your Collection
             </h1>
             <p className="text-zinc-400 text-sm mt-1">
-              Stored locally in your browser. Add cards from any card&rsquo;s detail view, the search panel, or the recommendation feed.
+              Stored locally in your browser. <button onClick={() => setShowImport(true)} className="text-violet-400 underline hover:text-violet-300">Import a list</button>, or add cards from any card&rsquo;s detail view, the search panel, or the recommendation feed.
             </p>
             {fastAddGroup && (
               <p className="text-[11px] text-zinc-500 mt-1">
@@ -200,6 +202,13 @@ export function CollectionView() {
               value={`$${stats.estimatedValueUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
               accent="emerald"
             />
+            <button
+              onClick={() => setShowImport(true)}
+              className="btn btn-primary text-xs self-end"
+              title="Import a list of cards into your collection"
+            >
+              📥 Import
+            </button>
             <button
               onClick={() => setShowGroupManager(true)}
               className="btn btn-ghost text-xs self-end"
@@ -406,6 +415,8 @@ export function CollectionView() {
           }}
         />
       )}
+
+      <CollectionImportModal open={showImport} onClose={() => setShowImport(false)} />
 
       <CardHoverLayer hover={hover} />
     </div>

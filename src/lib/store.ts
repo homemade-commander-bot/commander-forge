@@ -48,6 +48,11 @@ export interface Profile {
   name: string;
   avatar: string;
   createdAt: number;
+  // Last time the user explicitly edited the profile. The last-write-wins
+  // tiebreaker for cloud sync. Defaults to 0 ("never edited") so a fresh
+  // device's untouched default profile always yields to a customized cloud
+  // profile rather than overwriting it.
+  updatedAt?: number;
   preferredColors: string[];
   favoriteThemes: string[];
   // Which collection group the per-card "+ Collection" / fast-add
@@ -59,6 +64,7 @@ const defaultProfile = (): Profile => ({
   name: "Planeswalker",
   avatar: "🧙",
   createdAt: Date.now(),
+  updatedAt: 0,
   preferredColors: [],
   favoriteThemes: [],
   fastAddGroupId: DEFAULT_GROUP_ID,
@@ -177,7 +183,19 @@ export const useDeckStore = create<DeckStore>()(
       },
       swipedIds: {},
 
-      setProfile: (patch) => set((s) => ({ profile: { ...s.profile, ...patch } })),
+      // Stamp updatedAt on every explicit edit so cloud sync can resolve
+      // which device's profile is newest. fastAddGroupId changes are a local
+      // UI preference, not profile content, so they don't bump the stamp.
+      setProfile: (patch) =>
+        set((s) => ({
+          profile: {
+            ...s.profile,
+            ...patch,
+            updatedAt: "fastAddGroupId" in patch && Object.keys(patch).length === 1
+              ? s.profile.updatedAt
+              : Date.now(),
+          },
+        })),
       resetProfile: () => set({ profile: defaultProfile() }),
 
       createDeck: (name) => {

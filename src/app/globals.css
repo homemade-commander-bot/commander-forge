@@ -81,6 +81,35 @@ body {
 .btn {
   @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all;
 }
+
+/* ---- Touch feedback ------------------------------------------------------
+   Mobile browsers add a ~300ms tap delay and a grey highlight flash on tap.
+   We suppress both and supply our own immediate feedback (a slight press-in
+   scale + state changes), so taps feel responsive and never leave the user
+   wondering whether the press registered. */
+button,
+.tap,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Every .btn visibly presses in the instant it's tapped/clicked — felt
+   before the action's result even paints. */
+.btn:active { transform: scale(0.96); }
+
+/* A general "tappable" helper for non-.btn controls (inline text buttons
+   like Copy, icon buttons) so they get the same press feel. */
+.tap { transition: transform 120ms ease, color 120ms ease; }
+.tap:active { transform: scale(0.9); }
+
+/* Brief pop when an action is confirmed (e.g. "✓ Copied!"). */
+@keyframes tapPop {
+  0% { transform: scale(0.9); }
+  55% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+.tap-pop { animation: tapPop 240ms ease-out; }
 .btn-primary {
   background: linear-gradient(180deg, #7c3aed 0%, #6d28d9 100%); /* violet-600 → violet-700 */
   @apply text-white shadow-sm;

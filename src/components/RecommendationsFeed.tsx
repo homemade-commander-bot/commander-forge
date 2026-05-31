@@ -8,6 +8,7 @@ import { ManaCost, ColorIdentityPips } from "./ManaCost";
 import { frontImage, safeHttpUrl } from "@/lib/scryfall";
 import { CardHoverLayer, hoverProps, useCardHover, type CardHover } from "./CardHoverPreview";
 import { dragSourceProps } from "@/lib/dnd";
+import { haptic } from "@/lib/feedback";
 
 type SortMode = "rank" | "synergy" | "cmc" | "price";
 
@@ -92,6 +93,7 @@ export function RecommendationsFeed({ deck, onInspect }: Props) {
   function add(r: Recommendation) {
     addCard(deck.id, r.card);
     flashCard(r.card.id);
+    haptic();
   }
 
   // Filter & sort

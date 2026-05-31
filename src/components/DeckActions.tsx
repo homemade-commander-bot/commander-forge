@@ -6,16 +6,13 @@ import { useDeckStore } from "@/lib/store";
 import { toDeckText, toMarkdown } from "@/lib/export";
 import type { Deck } from "@/lib/types";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { CopyButton } from "./CopyButton";
 
 export function DeckActions({ deck }: { deck: Deck }) {
   const router = useRouter();
   const { renameDeck, deleteDeck } = useDeckStore();
   const [open, setOpen] = useState<null | "txt" | "md">(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-
-  function copy(text: string) {
-    void navigator.clipboard.writeText(text);
-  }
 
   function downloadFile(filename: string, text: string) {
     const blob = new Blob([text], { type: "text/plain" });
@@ -67,12 +64,10 @@ export function DeckActions({ deck }: { deck: Deck }) {
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs text-zinc-400">{open === "txt" ? "MTGO/Arena format" : "Markdown"}</span>
             <div className="flex gap-1">
-              <button
-                onClick={() => copy(open === "txt" ? toDeckText(deck) : toMarkdown(deck))}
+              <CopyButton
+                text={open === "txt" ? toDeckText(deck) : toMarkdown(deck)}
                 className="text-xs underline text-violet-400"
-              >
-                Copy
-              </button>
+              />
               <button
                 onClick={() =>
                   downloadFile(

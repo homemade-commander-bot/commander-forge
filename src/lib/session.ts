@@ -10,6 +10,17 @@
 import { useEffect, useState } from "react";
 import { getSupabase, isSyncEnabled } from "./supabase";
 import type { Deck } from "./types";
+import type { Profile } from "./store";
+
+// The subset of the profile that syncs to the cloud. fastAddGroupId is a
+// device-local UI preference and is intentionally excluded.
+export interface RemoteProfile {
+  name: string;
+  avatar: string;
+  preferredColors: string[];
+  favoriteThemes: string[];
+  updatedAt: number;
+}
 
 export interface SessionUser {
   id: string;
@@ -112,4 +123,43 @@ export async function deleteRemoteDeck(deckId: string): Promise<void> {
     method: "DELETE",
   });
   if (!res.ok) throw new Error(`Failed to delete deck (${res.status})`);
+}
+
+// ---- profile sync --------------------------------------------------------
+
+export async function fetchRemoteProfile(): Promise<RemoteProfile | null> {
+  const res = await authFetch("/api/profile");
+  if (!res.ok) throw new Error(`Failed to fetch profile (${res.status})`);
+  const json = (await res.json()) as { profile: RemoteProfile | null };
+  return json.profile;
+}
+
+export async function pushProfile(profile: Profile): Promise<void> {
+  const payload: RemoteProfile = {
+    name: profile.name,
+    avatar: profile.avatar,
+    preferredColors: profile.preferredColors ?? [],
+    favoriteThemes: profile.favoriteThemes ?? [],
+    updatedAt: profile.updatedAt ?? 0,
+  };
+  const res = await authFetch("/api/profile", {
+    method: "PUT",
+    body: JSON.stringify({ profile: payload }),
+  });
+  if (!res.ok) throw new Error(`Failed to save profile (${res.status})`);
+}
+
+// Decide whether the cloud profile should replace the local one. A
+// *customized* profile always beats a still-default one (so a fresh device
+// adopts the cloud identity instead of stomping it with "Planeswalker"); if
+// both are customized (or both default) the most recently edited wins.
+const DEFAULT_NAME = "Planeswalker";
+const DEFAULT_AVATAR = "🧙";
+
+export function remoteProfileWins(local: Profile, remote: RemoteProfile): boolean {
+  const localCustom = local.name !== DEFAULT_NAME || local.avatar !== DEFAULT_AVATAR;
+  const remoteCustom = remote.name !== DEFAULT_NAME || remote.avatar !== DEFAULT_AVATAR;
+  if (remoteCustom && !localCustom) return true;
+  if (localCustom && !remoteCustom) return false;
+  return (remote.updatedAt ?? 0) > (local.updatedAt ?? 0);
 }

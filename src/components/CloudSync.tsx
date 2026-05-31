@@ -12,7 +12,10 @@ import { useDeckStore } from "@/lib/store";
 import {
   deleteRemoteDeck,
   fetchRemoteDecks,
+  fetchRemoteProfile,
   pushDeck,
+  pushProfile,
+  remoteProfileWins,
   signInWithEmail,
   signOut,
   useSession,
@@ -32,6 +35,30 @@ export function CloudSync() {
 
   const decks = useDeckStore((s) => s.decks);
   const localCount = Object.keys(decks).length;
+  const profile = useDeckStore((s) => s.profile);
+
+  // Reconcile the profile (name/avatar/colors/themes) with the cloud. A
+  // customized profile beats a default one; otherwise newest-edit wins.
+  // Applying a remote win uses setState directly (not setProfile) so we keep
+  // the remote updatedAt instead of stamping "now".
+  const reconcileProfile = useCallback(async () => {
+    const remote = await fetchRemoteProfile();
+    const local = useDeckStore.getState().profile;
+    if (remote && remoteProfileWins(local, remote)) {
+      useDeckStore.setState((s) => ({
+        profile: {
+          ...s.profile,
+          name: remote.name,
+          avatar: remote.avatar,
+          preferredColors: remote.preferredColors,
+          favoriteThemes: remote.favoriteThemes,
+          updatedAt: remote.updatedAt,
+        },
+      }));
+    } else {
+      await pushProfile(local);
+    }
+  }, []);
 
   // Pull cloud decks and merge into local (last-write-wins by updatedAt),
   // recording how many decks the cloud holds for the diagnostic readout.
@@ -67,13 +94,14 @@ export function CloudSync() {
     try {
       await pullAndMerge();
       await pushAll();
+      await reconcileProfile();
       setSyncStatus("ok");
       setLastSync(Date.now());
     } catch (e) {
       setSyncStatus("error");
       setErrorMsg(e instanceof Error ? e.message : "Sync failed");
     }
-  }, [pullAndMerge, pushAll]);
+  }, [pullAndMerge, pushAll, reconcileProfile]);
 
   // On sign-in, reconcile both directions once.
   useEffect(() => {
@@ -99,6 +127,17 @@ export function CloudSync() {
     }, 1500);
     return () => window.clearTimeout(t);
   }, [decks, user, pushAll]);
+
+  // Push profile edits (name/avatar/colors/themes) to the cloud, debounced.
+  useEffect(() => {
+    if (!user) return;
+    const t = window.setTimeout(() => {
+      pushProfile(useDeckStore.getState().profile).catch(() => {
+        // Best-effort; the next sign-in reconcile will catch it up.
+      });
+    }, 1500);
+    return () => window.clearTimeout(t);
+  }, [profile, user]);
 
   if (!syncEnabled) {
     return (
