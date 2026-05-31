@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { SyncEngineMount } from "@/components/SyncEngineMount";
 
 export const metadata: Metadata = {
   title: "Manarune — Commander deck builder, collection & life tracker",
@@ -33,6 +34,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
+        {/* Headless + lazy: runs cloud sync app-wide when signed in (no-op
+            otherwise). Lazy so Supabase stays off the critical-path bundle. */}
+        <SyncEngineMount />
         <div className="min-h-screen flex flex-col">{children}</div>
       </body>
     </html>

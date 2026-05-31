@@ -3,12 +3,16 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useDeckStore } from "@/lib/store";
+import { useAuth } from "@/lib/auth-state";
+import { useSyncUi } from "@/lib/sync";
 
 export function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const { profile, decks, activeDeckId, createDeck, setActiveDeck } = useDeckStore();
   const list = Object.values(decks).sort((a, b) => b.updatedAt - a.updatedAt);
+  const { user, syncEnabled } = useAuth();
+  const syncStatus = useSyncUi((s) => s.status);
 
   function nav(path: string) {
     return `text-sm transition-colors px-2 py-1 rounded ${
@@ -76,8 +80,26 @@ export function Header() {
                 but never both concatenated. */}
             + New<span className="hidden sm:inline"> Deck</span>
           </button>
-          <Link href="/profile" className="flex items-center gap-2 px-1.5 sm:px-2 py-1 rounded hover:bg-bg-raised">
+          {/* Sign-in entry point — only shown when sync is configured and the
+              user is signed out. Hidden entirely for self-hosters with no
+              Supabase env vars, so there's no dead button. */}
+          {syncEnabled && !user && (
+            <Link href="/account" className="btn btn-ghost text-xs sm:text-sm px-2 sm:px-3" title="Sign in to sync across devices">
+              Sign in
+            </Link>
+          )}
+          <Link href="/profile" className="relative flex items-center gap-2 px-1.5 sm:px-2 py-1 rounded hover:bg-bg-raised" title={user ? `Signed in as ${user.email}` : "Profile"}>
             <span className="text-xl sm:text-2xl leading-none">{profile.avatar}</span>
+            {/* Synced indicator dot when signed in. */}
+            {user && (
+              <span
+                aria-hidden
+                title={syncStatus === "error" ? "Sync error" : syncStatus === "syncing" ? "Syncing…" : "Synced"}
+                className={`absolute top-0.5 right-0.5 h-2 w-2 rounded-full ring-2 ring-bg-panel ${
+                  syncStatus === "error" ? "bg-red-400" : syncStatus === "syncing" ? "bg-violet-400 animate-pulse" : "bg-emerald-400"
+                }`}
+              />
+            )}
             <span className="hidden sm:inline text-sm text-zinc-200">{profile.name}</span>
           </Link>
         </div>

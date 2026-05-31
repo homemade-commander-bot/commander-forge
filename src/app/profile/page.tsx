@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/Header";
-import { CloudSync } from "@/components/CloudSync";
+import { AccountSummaryCard } from "@/components/AccountSummaryCard";
 import { useDeckStore, AVATAR_OPTIONS, collectionStats } from "@/lib/store";
 import { totalCards, deckPriceUsd, landCount } from "@/lib/analytics";
 import { detectThemes } from "@/lib/recommend";
@@ -175,7 +175,7 @@ export default function ProfilePage() {
           )}
         </section>
 
-        <CloudSync />
+        <AccountSummaryCard />
 
         <section className="panel p-5">
           <h2 className="font-display text-lg text-violet-300 mb-2">Local data</h2>
