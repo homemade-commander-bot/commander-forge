@@ -11,6 +11,7 @@ import { useState } from "react";
 import { useDeckStore } from "@/lib/store";
 import { signInWithEmail, signOut, useSession } from "@/lib/session";
 import { runSyncNow, useSyncUi, type SyncStatus } from "@/lib/sync";
+import { OAuthButtons } from "./OAuthButtons";
 
 export function CloudSync() {
   const { user, syncEnabled, loading } = useSession();
@@ -54,8 +55,9 @@ export function CloudSync() {
       <section className="panel p-5 space-y-3">
         <h2 className="font-display text-lg text-violet-300">Sign in</h2>
         <p className="text-xs text-zinc-400">
-          Sync your decks, collection, and profile across devices. We&rsquo;ll email you a one-time magic link — no password.
+          Sync your decks, collection, and profile across devices. No password — use a social login or a one-time email magic link.
         </p>
+        <OAuthButtons />
         <form
           onSubmit={async (e) => {
             e.preventDefault();

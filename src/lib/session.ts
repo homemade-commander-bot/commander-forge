@@ -81,6 +81,39 @@ export async function signInWithEmail(email: string): Promise<{ error: string | 
   return { error: error?.message ?? null };
 }
 
+export type OAuthProvider = "google" | "discord";
+
+// Which OAuth providers to surface, gated by the NEXT_PUBLIC_OAUTH_PROVIDERS
+// env var (comma-separated, e.g. "google,discord"). Env-gating means the
+// buttons only appear once the provider is actually configured in the
+// Supabase dashboard — no dead buttons that error on click in production.
+export function enabledOAuthProviders(): OAuthProvider[] {
+  const raw = process.env.NEXT_PUBLIC_OAUTH_PROVIDERS ?? "";
+  const set = new Set(raw.split(",").map((s) => s.trim().toLowerCase()));
+  const out: OAuthProvider[] = [];
+  if (set.has("google")) out.push("google");
+  if (set.has("discord")) out.push("discord");
+  return out;
+}
+
+// Start an OAuth sign-in. With implicit flow the provider redirects back to
+// /auth/callback with the session in the URL fragment, which the callback
+// client page parses — the same path magic links use. On success the browser
+// navigates away, so this only returns on error.
+export async function signInWithProvider(
+  provider: OAuthProvider,
+): Promise<{ error: string | null }> {
+  const sb = getSupabase();
+  if (!sb) return { error: "Sync is not configured." };
+  const redirectTo =
+    typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined;
+  const { error } = await sb.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo },
+  });
+  return { error: error?.message ?? null };
+}
+
 export async function signOut(): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
